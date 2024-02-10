@@ -29,6 +29,7 @@ top_pipe_image = pygame.image.load("data/pipe_top.png")
 bottom_pipe_image = pygame.image.load("data/pipe_bottom.png")
 game_over_image = pygame.image.load("data/game_over.png")
 start_image = pygame.image.load("data/start.png")
+sky_image = pygame.image.load('data/sky.png')
 
 ### sound
 
@@ -47,6 +48,7 @@ max_score = 0
 font = pygame.font.SysFont('Segoe', 26)
 game_stopped = True
 count_fond = 1
+option_play = 1
 
 
 # load base for play
@@ -78,20 +80,25 @@ class Start_Menu:
     def __init__(self, screen):
         screen.blit(sky_change[count_image], (0, 0))
         self.font = pygame.font.Font(None, 50)
-        self.play_text = self.font.render("Начать играть!", False, (255, 165, 0))
+        self.play_text = self.font.render("Обычный режим", False, (255, 165, 0))
+        self.inver_play_text = self.font.render("Сложный режим", False, (255, 165, 0))
         self.skin_text = self.font.render("Настройки", False, (255, 165, 0))
         self.exit_text = self.font.render("Выход", False, (255, 165, 0))
 
         self.play_x = width // 2 - self.play_text.get_width() // 2
         self.play_y = height // 2 - self.play_text.get_height() // 2 - 75
 
+        self.inver_play_x = width // 2 - self.play_text.get_width() // 2
+        self.inver_play_y = height // 2 - self.play_text.get_height() // 2 - 25
+
         self.skin_x = width // 2 - self.skin_text.get_width() // 2
-        self.skin_y = height // 2 - self.skin_text.get_height() // 2 - 25
+        self.skin_y = height // 2 - self.skin_text.get_height() // 2 + 25
 
         self.exit_x = width // 2 - self.exit_text.get_width() // 2
-        self.exit_y = height // 2 - self.exit_text.get_height() // 2 + 25
+        self.exit_y = height // 2 - self.exit_text.get_height() // 2 + 75
 
         screen.blit(self.play_text, (self.play_x, self.play_y))
+        screen.blit(self.inver_play_text, (self.inver_play_x, self.inver_play_y))
         screen.blit(self.skin_text, (self.skin_x, self.skin_y))
         screen.blit(self.exit_text, (self.exit_x, self.exit_y))
 
@@ -105,6 +112,10 @@ class Start_Menu:
         elif self.skin_x - 10 <= coords[0] <= self.skin_x - 10 + self.skin_text.get_width() + 20 and self.skin_y - 10 <= \
                 coords[1] <= self.skin_y - 10 + self.skin_text.get_height() + 20:
             return 2
+        elif self.inver_play_x - 10 <= coords[
+            0] <= self.inver_play_x - 10 + self.inver_play_text.get_width() + 20 and self.inver_play_y - 10 <= \
+                coords[1] <= self.inver_play_y - 10 + self.inver_play_text.get_height() + 20:
+            return 4
 
 
 class Setting:
@@ -240,15 +251,19 @@ class Bird(pygame.sprite.Sprite):
         self.rect.y = height // 2 - self.image.get_height() // 2 - 175
 
     def update(self, user_input):
+        global option_play
         # animate
         if self.alive:
             self.image_index += 1
         if self.image_index >= 30:
             self.image_index = 0
-        self.image = bird_images[count_bird][self.image_index // 10]
+        if option_play == -1:
+            self.image = pygame.transform.flip(bird_images[count_bird][self.image_index // 10], False, True)
+        else:
+            self.image = bird_images[count_bird][self.image_index // 10]
 
         # move bird
-        self.vel += 0.5
+        self.vel += 0.5 * option_play
         if self.vel > 7:
             self.vel = 7
         if self.rect.y < 500:
@@ -262,8 +277,10 @@ class Bird(pygame.sprite.Sprite):
         # wait space
         if user_input[pygame.K_SPACE] and not self.flap and self.rect.y > 0 and self.alive:
             self.flap = True
-            self.vel = -7
+            self.vel = -7 * option_play
             jump.play()
+        if option_play == -1 and not self.alive:
+            self.vel += 5
 
 
 class Pipe(pygame.sprite.Sprite):
@@ -307,6 +324,31 @@ class Ground(pygame.sprite.Sprite):
             self.kill()
 
 
+class Sky(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = sky_image
+        self.rect = self.image.get_rect()
+        self.rect.x, self.rect.y = x, y
+
+    def update(self):
+        # move ground
+        self.rect.x -= scroll_speed
+        if self.rect.x <= -width:
+            self.kill()
+
+
+class ButtonExit:
+    def __init__(self, screen):
+        self.text = font.render("Выйти(Q)", True, (255, 0, 0))
+        self.text_x = width - self.text.get_width() - 25
+        self.text_y = 25
+        screen.blit(self.text, (self.text_x, self.text_y))
+
+    def draw(self, screen):
+        screen.blit(self.text, (self.text_x, self.text_y))
+
+
 def quit_game():
     # exit
     for event in pygame.event.get():
@@ -332,6 +374,11 @@ def main():
     x_pos_ground, y_pos_ground = 0, 520
     ground = pygame.sprite.Group()
     ground.add(Ground(x_pos_ground, y_pos_ground))
+    button = ButtonExit(screen)
+
+    x_pos_sky, y_pos_sky = -1, 0
+    sky = pygame.sprite.Group()
+    sky.add(Sky(x_pos_sky, y_pos_sky))
 
     run = True
     while run:
@@ -350,11 +397,14 @@ def main():
         # spawn
         if len(ground) <= 2:
             ground.add(Ground(width, y_pos_ground))
+            sky.add(Sky(x_pos_sky, y_pos_sky))
 
         # draw all
         pipes.draw(screen)
         ground.draw(screen)
         bird.draw(screen)
+        button.draw(screen)
+        sky.draw(screen)
 
         # count score
         score_text = font.render('Счет: ' + str(score), True, pygame.Color(255, 255, 255))
@@ -368,12 +418,19 @@ def main():
         if bird.sprite.alive:
             pipes.update()
             ground.update()
+            sky.update()
+
         bird.update(user_input)
+        if user_input[pygame.K_q]:
+            run = False
+            entrance()
+            break
 
         # collision
         collision_pipes = pygame.sprite.spritecollide(bird.sprites()[0], pipes, False)
         collision_ground = pygame.sprite.spritecollide(bird.sprites()[0], ground, False)
-        if collision_pipes or collision_ground:
+        collision_sky = pygame.sprite.spritecollide(bird.sprites()[0], sky, False)
+        if collision_pipes or collision_ground or collision_sky:
             bird.sprite.alive = False
             loss.play()
             if collision_ground:
@@ -381,6 +438,10 @@ def main():
                                               height // 2 - game_over_image.get_height() // 2))
                 if user_input[pygame.K_r]:
                     score = 0
+                    break
+                if user_input[pygame.K_q]:
+                    run = False
+                    entrance()
                     break
 
         # spawn
@@ -413,16 +474,20 @@ def restart():
                                   height // 2 - start_image.get_height() // 2))
         # User Input
         user_input = pygame.key.get_pressed()
+        button = ButtonExit(screen)
+        button.draw(screen)
 
         if user_input[pygame.K_SPACE]:
             main()
+        if user_input[pygame.K_q]:
+            entrance()
 
         pygame.display.update()
 
 
 # window entrance
 def entrance():
-    global game_stopped
+    global game_stopped, option_play
     start_window = Start_Menu(screen)
     while game_stopped:
         for event in pygame.event.get():
@@ -431,12 +496,16 @@ def entrance():
                 update_base()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if start_window.check(event.pos) == 1:
+                    option_play = 1
                     restart()
                 elif start_window.check(event.pos) == 3:
                     update_base()
                     game_stopped = False
                 elif start_window.check(event.pos) == 2:
                     settings()
+                elif start_window.check(event.pos) == 4:
+                    option_play = -1
+                    restart()
         pygame.display.flip()
 
 
